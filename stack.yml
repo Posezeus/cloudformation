@@ -1,102 +1,81 @@
----
-AWSTemplateFormatVersion: "2010-09-09"
-
-Description:
-  Cloudformation template to deploy two lambda functions and an http gateway with 
-  get and post API's that point the two lambda functions respectively
+AWSTemplateFormatVersion: 2010-09-09
+Description: My API Gateway and Lambda function
 
 Resources:
-  HTTPApi:
+
+  LambdaFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      Handler: index.handler
+      Role: arn:aws:iam::835764170597:role/LambdaApiGatewayRole
+      Code:
+        S3Bucket: randolphbucket
+        S3Key: function.zip
+      Runtime: python3.9
+      Timeout: 5
+      TracingConfig:
+        Mode: Active
+      # VpcConfig:
+      #   SecurityGroupIds:
+      #     - sg-085912345678492fb
+      #   SubnetIds:
+      #     - subnet-071f712345678e7c8
+      #     - subnet-07fd123456788a036
+
+  DemoLambdaInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref LambdaFunction
+      Action: "lambda:InvokeFunction"
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${DemoApiGateway}/${DemoApiStage}/${DemoApiRoute}/
+
+      # SourceArn: !GetAtt LambdaFunction.Arn
+
+  DemoApiGateway:
     Type: AWS::ApiGatewayV2::Api
     Properties:
-      Name: ade-api
+      Name: Get started HTTP API
       ProtocolType: HTTP
-      Description: This is an Http Api Gateway
-  Integration:
+
+  DemoIntegration:
     Type: AWS::ApiGatewayV2::Integration
     Properties:
-      ApiId: !Ref HTTPApi
-      Description: Lambda Integration
+      ApiId: !Ref DemoApiGateway
+      Description: Lambda proxy integration
       IntegrationType: AWS_PROXY
-      IntegrationUri: !Sub
-          - arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${lambdaArn}/invocations
-          - lambdaArn: !GetAtt lambdaFunction.Arn
       IntegrationMethod: POST
-      PayloadFormatVersion: '1.0'
-  # Integration2:
-  #   Type: AWS::ApiGatewayV2::Integration
-  #   Properties:
-  #     ApiId: !Ref HTTPApi
-  #     Description: Lambda Integration
-  #     IntegrationType: HTTP_PROXY
-  #     IntegrationUri: https:// 
-  #        - lambdaArn: !GetAtt lambdaFunction2.Arn
-  #     IntegrationMethod: ANY
-  #     PayloadFormatVersion: '1.0'
-  Route:
+      PayloadFormatVersion: "2.0"
+      IntegrationUri: !Sub 
+        - 'arn:${AWS::Partition}:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${LambdaFunction.Arn}/invocations'
+        - lambdaArn: !GetAtt LambdaFunction.Arn
+
+  
+  DemoApiRoute:
     Type: AWS::ApiGatewayV2::Route
     Properties:
-      ApiId: !Ref HTTPApi
-      RouteKey: '$default'
+      ApiId: !Ref DemoApiGateway
+      RouteKey: "POST /demo"
+      AuthorizationType: NONE
       Target: !Join
         - /
         - - integrations
-          - !Ref Integration
+          - !Ref DemoIntegration
 
-  Stage:
+  DemoApiStage:
     Type: AWS::ApiGatewayV2::Stage
     Properties:
-      ApiId: !Ref HTTPApi
+      ApiId: !Ref DemoApiGateway
+      StageName: Live
+      Description: Live Stage
       AutoDeploy: true
-      StageName: Dev
 
-  lambdaFunction2:
-    Type: AWS::Lambda::Function
-    Properties:
-      Role: arn:aws:iam::835764170597:role/LambdaApiGatewayRole
-      Code:
-        S3Bucket: aden
-        S3Key: adelogin.zip
-      Description: Login Lambda function
-      FunctionName: adelogin
-      Handler: index.handler
-      MemorySize: 128
-      Runtime: python3.8
-  lambdaFunction:
-    Type: AWS::Lambda::Function
-    Properties:
-      Role: arn:aws:iam::835764170597:role/LambdaApiGatewayRole
-      Code:
-        S3Bucket: aden
-        S3Key: adesignup.zip
-      Description: Sign up Lambda function
-      FunctionName: adesignup
-      Handler: index.handler
-      Runtime: python3.8    
+Outputs:
 
-  lambdaApiGatewayInvoke:
-    Type: AWS::Lambda::Permission
-    Properties:
-      Action: lambda:InvokeFunction
-      FunctionName: !GetAtt lambdaFunction.Arn
-      Principal: apigateway.amazonaws.com
-      # note: if route *not* at API Gateway root, `SourceArn` would take the form of:
-      #               arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${HTTPApi}/${apiGatewayStageName}/${apiGatewayHTTPMethod}/PATH_PART
-      SourceArn: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${HTTPApi}/${Stage}/${Route}/
-#   # lambdaApiGatewayInvoke2:
-#   #   Type: AWS::Lambda::Permission
-#   #   Properties:
-#   #     Action: lambda:InvokeFunction
-#   #     FunctionName: !GetAtt lambdaFunction2.Arn
-#   #     Principal: apigateway.amazonaws.com
-#   #     # note: if route *not* at API Gateway root, `SourceArn` would take the form of:
-#   #     #               arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${apiGateway}/${StageName}/${apiGatewayHTTPMethod}/PATH_PART
-#   #     SourceArn: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${apiGateway}/${StageName}/${apiGatewayHTTPMethod}/
+  LambdaFunction1:
+    Description: Lambda functions
+    Value: !Ref LambdaFunction
 
-# Outputs:
-#   apiGatewayInvokeURL:
-#     Value: !Sub https://${apiGateway}.execute-api.${AWS::Region}.amazonaws.com/${StageName}
-
-#   lambdaArn:
-#     Value: !GetAtt lambdaFunction.Arn
-#     # Value: !GetAtt lambdaFunction2.Arn
+  ApiGateway:
+    Description: Api gateway
+    Value: !Ref DemoApiGateway
